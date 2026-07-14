@@ -92,7 +92,7 @@ kubectl port-forward svc/argocd-server -n argocd 8080:443
 
 
 ```hcl
-aws_region                = "us-west-2"
+aws_region                = "us-esat-1"
 cluster_name              = "retail-store"        # Will have random suffix added
 environment               = "dev"
 kubernetes_version        = "1.33"

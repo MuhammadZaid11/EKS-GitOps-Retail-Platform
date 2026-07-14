@@ -5,7 +5,10 @@ A production-style deployment of a multi-tier microservices retail application o
 > Built as a hands-on learning project to understand how real DevOps teams take infrastructure and applications from code to production. Based on the [retail-store-sample-app](https://github.com/LondheShubham153/retail-store-sample-app) reference architecture, adapted and documented by Muhammad Zaid.
 
 ---
-
+![alt text](image.png)
+![alt text](image-1.png)
+![alt text](image-2.png)
+---
 ## Architecture
 
 ```

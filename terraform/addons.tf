@@ -23,21 +23,29 @@ module "eks_addons" {
 
   # =============================================================================
   # NGINX INGRESS CONTROLLER - Load Balancing and Routing
+  # NOTE: Using NodePort because this AWS account does not permit ELB/NLB creation.
+  #       To switch to LoadBalancer later, change service.type back to "LoadBalancer",
+  #       restore externalTrafficPolicy to "Local", and re-add the set_sensitive
+  #       NLB annotations below.
   # =============================================================================
   enable_ingress_nginx = true
   ingress_nginx = {
     most_recent = true
     namespace   = "ingress-nginx"
 
-    # Basic configuration
+    # Allow enough time for the controller pod to start on EKS Auto Mode nodes
+    timeout = 600
+
     set = [
+      # NodePort avoids triggering AWS LoadBalancer creation (account restriction)
       {
         name  = "controller.service.type"
-        value = "LoadBalancer"
+        value = "NodePort"
       },
+      # Cluster policy required for NodePort (Local only works with LoadBalancer)
       {
         name  = "controller.service.externalTrafficPolicy"
-        value = "Local"
+        value = "Cluster"
       },
       {
         name  = "controller.resources.requests.cpu"
@@ -49,39 +57,20 @@ module "eks_addons" {
       },
       {
         name  = "controller.resources.limits.cpu"
-        value = "200m"
+        value = "500m"
       },
       {
         name  = "controller.resources.limits.memory"
-        value = "256Mi"
-      }
-    ]
-
-    # AWS Load Balancer specific annotations
-    set_sensitive = [
+        value = "512Mi"
+      },
+      # Disable admission webhook hooks to prevent post-upgrade job timeouts
       {
-        name  = "controller.service.annotations.service\\.beta\\.kubernetes\\.io/aws-load-balancer-scheme"
-        value = "internet-facing"
+        name  = "controller.admissionWebhooks.enabled"
+        value = "false"
       },
       {
-        name  = "controller.service.annotations.service\\.beta\\.kubernetes\\.io/aws-load-balancer-type"
-        value = "nlb"
-      },
-      {
-        name  = "controller.service.annotations.service\\.beta\\.kubernetes\\.io/aws-load-balancer-nlb-target-type"
-        value = "instance"
-      },
-      {
-        name  = "controller.service.annotations.service\\.beta\\.kubernetes\\.io/aws-load-balancer-health-check-path"
-        value = "/healthz"
-      },
-      {
-        name  = "controller.service.annotations.service\\.beta\\.kubernetes\\.io/aws-load-balancer-health-check-port"
-        value = "10254"
-      },
-      {
-        name  = "controller.service.annotations.service\\.beta\\.kubernetes\\.io/aws-load-balancer-health-check-protocol"
-        value = "HTTP"
+        name  = "controller.admissionWebhooks.patch.enabled"
+        value = "false"
       }
     ]
   }
