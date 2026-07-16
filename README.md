@@ -1,36 +1,47 @@
 # EKS GitOps Retail Platform
 
-A production-style deployment of a multi-tier microservices retail application on **Amazon EKS (Auto Mode)**, provisioned with **Terraform** and deployed using **GitOps principles with ArgoCD** and **GitHub Actions**.
+A production-style deployment of a multi-service retail application on **Amazon EKS (Auto Mode)**, provisioned entirely with **Terraform** and deployed using **GitOps** with **ArgoCD**.
 
-> Built as a hands-on learning project to understand how real DevOps teams take infrastructure and applications from code to production. Based on the [retail-store-sample-app](https://github.com/LondheShubham153/retail-store-sample-app) reference architecture, adapted and documented by Muhammad Zaid.
+> Built as a hands-on project to understand how real DevOps teams take infrastructure and applications from code to a live, running production system — end to end, no manual `kubectl apply`.
+
+---
+
+## Live Architecture
+
+```
+Developer commits & pushes to GitHub
+        │
+        ▼
+ArgoCD ── continuously watches the Git repo ── detects manifest changes
+        │
+        ▼
+Amazon EKS (Auto Mode) ── schedules & runs workloads ── AWS manages node scaling
+        │
+        ▼
+NGINX Ingress Controller ── routes external traffic into the cluster
+        │
+        ▼
+cert-manager ── automatically issues & renews TLS certificates via Let's Encrypt (ACME)
+```
+
+**5 independent microservices**, each managed as its own ArgoCD Application:
+
+| Service | Helm Chart Path | Status |
+|---|---|---|
+| cart | `src/cart/chart` | ✅ Healthy / Synced |
+| catalog | `src/catalog/chart` | ✅ Healthy / Synced |
+| checkout | `src/checkout/chart` | ✅ Healthy / Synced |
+| orders | `src/orders/chart` | ✅ Healthy / Synced |
+| ui | `src/ui/chart` | ✅ Healthy / Synced |
+
+*(Screenshot of ArgoCD dashboard and live app UI here)*
 
 ---
 ![alt text](image.png)
 ![alt text](image-1.png)
 ![alt text](image-2.png)
 ---
-## Architecture
 
-```
-Developer pushes code
-        │
-        ▼
-GitHub Actions (CI) ── builds Docker image ── pushes to Amazon ECR
-        │
-        ▼
-ArgoCD (CD) ── watches Git repo for manifest/Helm changes ── syncs desired state
-        │
-        ▼
-Amazon EKS (Auto Mode) ── runs the workloads
-        │
-        ▼
-NGINX Ingress Controller ── routes external traffic ── Load Balancer URL
-        │
-        ▼
-Cert Manager ── issues/renews TLS certificates automatically
-```
-
-*(Add your own architecture diagram screenshot here once your cluster is live — e.g. from draw.io or excalidraw.com)*
 
 ---
 
@@ -38,89 +49,99 @@ Cert Manager ── issues/renews TLS certificates automatically
 
 | Category | Tools |
 |---|---|
-| Cloud Provider | AWS (EKS, VPC, IAM, ECR, ELB) |
+| Cloud Provider | AWS (EKS, VPC, IAM, ELB) |
 | Infrastructure as Code | Terraform |
 | Container Orchestration | Kubernetes (EKS Auto Mode) |
 | GitOps / CD | ArgoCD |
-| CI | GitHub Actions |
 | Networking | NGINX Ingress Controller |
-| TLS | Cert Manager (Let's Encrypt) |
+| TLS | cert-manager (Let's Encrypt / ACME) |
 | Package Management | Helm |
+
+---
+
+## Repo Structure
+
+```
+.
+├── terraform/
+│   ├── main.tf              # Core cluster + provider config
+│   ├── locals.tf            # Local values / naming conventions
+│   ├── variables.tf         # Input variables
+│   ├── outputs.tf           # Cluster endpoint, useful kubectl commands, etc.
+│   ├── addons.tf            # cert-manager, ingress-nginx, ArgoCD as EKS addons
+│   ├── argocd.tf            # ArgoCD bootstrap configuration
+│   ├── security.tf          # IAM roles, security groups (custom addition)
+│   └── versions.tf          # Provider version constraints
+├── src/                     # Application source + Helm charts per microservice
+├── BRANCHING_STRATEGY.md    # Git branching model used for this project
+└── README.md
+```
 
 ---
 
 ## What This Project Demonstrates
 
-- **Infrastructure as Code**: Entire AWS infrastructure (VPC, subnets, EKS cluster, IAM roles, security groups) defined declaratively in Terraform — no manual console clicking.
-- **GitOps workflow**: Git is the single source of truth. Any change to application manifests is automatically detected and synced to the cluster by ArgoCD — no manual `kubectl apply`.
-- **CI/CD separation of concerns**: GitHub Actions handles build (CI), ArgoCD handles deploy (CD) — cluster credentials never live inside the CI pipeline.
-- **Managed Kubernetes at scale**: EKS Auto Mode removes manual node group management, letting AWS handle compute provisioning, scaling, and patching.
-- **Secure ingress**: All traffic routed through NGINX Ingress with automated TLS certificate issuance via Cert Manager.
+- **Infrastructure as Code**: VPC (public + private subnets), EKS cluster, IAM roles, and security groups — all declared in Terraform, fully reproducible and destroyable on demand.
+- **True GitOps workflow**: ArgoCD continuously reconciles the live cluster state against Git. Pushing a change to `src/*/chart` is the *only* action needed to deploy — no manual cluster access required.
+- **Managed Kubernetes at scale**: EKS Auto Mode handles node provisioning, scaling, and patching automatically — no self-managed node groups.
+- **Automated, secure ingress**: All traffic flows through NGINX Ingress with TLS auto-issued and renewed by cert-manager — zero manual certificate handling.
+- **Namespace isolation**: `argocd`, `cert-manager`, `ingress-nginx`, and `retail-store` are kept in separate namespaces — a production best practice for blast-radius control.
+- **Operational readiness**: Verified via `kubectl describe`, `kubectl logs`, and `kubectl get events` — not just "it's green in the dashboard."
 
 ---
 
 ## Getting Started
 
 ### Prerequisites
-
-- AWS CLI v2, configured with an IAM user (not root)
-- Terraform >= 1.5
-- kubectl
-- Helm
-- Docker
+AWS CLI v2 (configured), Terraform ≥ 1.5, kubectl, Helm, Docker
 
 ### 1. Provision infrastructure
-
 ```bash
 cd terraform/
 terraform init
-terraform apply --auto-approve
+terraform plan      # always review before applying
+terraform apply
 ```
 
-This creates the VPC, EKS cluster (Auto Mode), IAM roles/security groups, and installs ArgoCD, NGINX Ingress, and Cert Manager.
-
 ### 2. Connect to the cluster
-
 ```bash
-aws eks update-kubeconfig --name retail-store --region <your-region>
+aws eks update-kubeconfig --name <cluster_name> --region us-east-1
 kubectl get nodes
 ```
 
-### 3. Access the application
+### 3. Verify everything is running
+```bash
+kubectl get ns
+kubectl get pods -n retail-store
+kubectl get applications -n argocd
+```
 
+### 4. Access the app
 ```bash
 kubectl get svc -n ingress-nginx
 ```
+Open the `EXTERNAL-IP` / hostname of the load balancer in your browser.
 
-Copy the `EXTERNAL-IP` of the ingress-nginx-controller service and open it in your browser.
-
-### 4. Access ArgoCD UI
-
+### 5. Tear down (avoid unnecessary AWS charges)
 ```bash
-kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
-```
-
-Use this password with username `admin` to log into the ArgoCD dashboard and watch live sync status.
-
-### 5. Tear down (important — avoid unwanted AWS charges)
-
-```bash
-terraform destroy --auto-approve
+terraform destroy
 ```
 
 ---
 
 ## Lessons Learned
 
-*(Fill this in as you go — this section is what makes your README stand out to recruiters. Document real issues you hit and how you solved them.)*
+*(Fill in with real issues you hit — this is the section that makes the repo yours, not a tutorial copy)*
 
-- 
-- 
-- 
+-
+-
+-
 
 ---
 
 ## Author
 
-**Muhammad Zaid** — Transitioning from Mechanical Engineering into DevOps & Cloud Engineering.
-[LinkedIn](#) · [GitHub](#)
+**Muhammad Zaid** — Mechanical Engineer transitioning into DevOps & Cloud Engineering, based in Karachi, Pakistan.
+[LinkedIn](#) · [GitHub](https://github.com/MuhammadZaid11) · [This Project](https://github.com/MuhammadZaid11/EKS-GitOps-Retail-Platform)
+
+*This project is based on the [retail-store-sample-app](https://github.com/LondheShubham153/retail-store-sample-app) reference architecture, forked and extended with custom Terraform structure, security configuration, and documentation.*
